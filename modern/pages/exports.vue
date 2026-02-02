@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useWallet } from '~/composables/useWallet'
 import type { ExportJob } from '~/types'
 
@@ -11,6 +11,7 @@ const exportUrl = ref('')
 const exportCount = ref(200)
 const exports = ref<ExportJob[]>([])
 const isLoading = ref(false)
+const isFetching = ref(false)
 const snackbar = ref(false)
 const snackbarText = ref('')
 
@@ -24,11 +25,15 @@ const headers = [
 
 async function fetchExports() {
   if (!walletId.value) return
+  isFetching.value = true
   try {
     const data = await $fetch<ExportJob[]>(`/api/exports/${walletId.value}`)
     exports.value = data
   } catch {
-    console.error('Failed to fetch exports')
+    snackbarText.value = 'Failed to load exports.'
+    snackbar.value = true
+  } finally {
+    isFetching.value = false
   }
 }
 
@@ -48,16 +53,30 @@ async function doExport() {
   const cost = (exportCount.value - 100) / 10
 
   if (exportCount.value > 100 && credits.value < cost) {
-    snackbarText.value = 'Not enough credits'
+    snackbarText.value = `Not enough credits. You need ${cost.toFixed(1)} but have ${credits.value}.`
     snackbar.value = true
     return
   }
 
-  try {
-    const sourceUrl = new URL(exportUrl.value)
-    const exportApiUrl = `/api/export?${sourceUrl.searchParams.toString()}`
+  if (!exportUrl.value) {
+    snackbarText.value = 'Paste a search URL first.'
+    snackbar.value = true
+    return
+  }
 
-    const data = await $fetch<any>(exportApiUrl, {
+  isLoading.value = true
+  try {
+    let searchParams: string
+    try {
+      const sourceUrl = new URL(exportUrl.value)
+      searchParams = sourceUrl.searchParams.toString()
+    } catch {
+      snackbarText.value = 'Invalid URL format.'
+      snackbar.value = true
+      return
+    }
+
+    const data = await $fetch<ExportJob & { success?: boolean }>(`/api/export?${searchParams}`, {
       method: 'POST',
       body: {
         walletId: walletId.value,
@@ -80,6 +99,8 @@ async function doExport() {
   } catch {
     snackbarText.value = 'Export failed. Credits not deducted.'
     snackbar.value = true
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -99,12 +120,15 @@ function getStatusColor(status: string) {
 }
 
 onMounted(() => {
-  if (route.query.url) {
-    exportUrl.value = decodeURIComponent(route.query.url as string)
-    showExportDialog.value = true
+  if (route.query.url && typeof route.query.url === 'string') {
+    try {
+      exportUrl.value = decodeURIComponent(route.query.url)
+      showExportDialog.value = true
+    } catch {
+      // Invalid URL encoding
+    }
   }
 
-  // Watch for walletId to be loaded then fetch exports
   const unwatch = watch(walletId, (val) => {
     if (val) {
       fetchExports()
@@ -135,8 +159,22 @@ onUnmounted(() => {
     </div>
 
     <v-card>
-      <v-card-title>Exports List</v-card-title>
+      <v-card-title class="d-flex align-center">
+        Exports List
+        <v-spacer />
+        <v-progress-circular v-if="isFetching" indeterminate size="20" width="2" class="ml-2" />
+      </v-card-title>
+
+      <template v-if="exports.length === 0 && !isFetching">
+        <v-card-text>
+          <v-alert type="info" variant="outlined">
+            No exports yet. Use the search page and click "Export More" to create one.
+          </v-alert>
+        </v-card-text>
+      </template>
+
       <v-data-table
+        v-else
         :items="exports"
         :headers="headers"
         :items-per-page="10"

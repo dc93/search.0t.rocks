@@ -6,6 +6,7 @@ const { walletId, credits, isLoading, updateWalletId, copyWalletId, fetchBalance
 
 const showWallet = ref(false)
 const walletFill = ref(0)
+const walletInput = ref('')
 const snackbar = ref(false)
 const snackbarText = ref('')
 
@@ -15,8 +16,15 @@ function handleCopy() {
   snackbar.value = true
 }
 
-function handleUpdateWalletId(newId: string) {
-  updateWalletId(newId)
+function handleUpdateWalletId() {
+  if (walletInput.value && walletInput.value.length === 36) {
+    updateWalletId(walletInput.value)
+    snackbarText.value = 'Wallet ID updated.'
+    snackbar.value = true
+  } else {
+    snackbarText.value = 'Invalid wallet ID (must be 36 characters).'
+    snackbar.value = true
+  }
 }
 
 function doFillWallet() {
@@ -31,13 +39,20 @@ function doFillWallet() {
     snackbar.value = true
     return
   }
-  window.location.href = `/fillWallet/${walletId.value}/${amount}`
+  // Payment integration placeholder — replace with Stripe/crypto checkout
+  snackbarText.value = 'Payment integration not yet configured.'
+  snackbar.value = true
+}
+
+function onDialogOpen() {
+  walletInput.value = walletId.value
+  showWallet.value = true
 }
 </script>
 
 <template>
   <div>
-    <v-btn @click="showWallet = true" variant="text" class="text-white">
+    <v-btn @click="onDialogOpen" variant="text" class="text-white">
       <span v-if="isLoading">Loading...</span>
       <span v-else>{{ credits }} Credits</span>
       <v-icon end>mdi-wallet</v-icon>
@@ -68,13 +83,22 @@ function doFillWallet() {
 
         <v-card-text>
           <v-text-field
-            v-model="walletId"
+            v-model="walletInput"
             label="Wallet ID"
             append-inner-icon="mdi-content-copy"
             @click:append-inner="handleCopy"
-            @change="handleUpdateWalletId(($event.target as HTMLInputElement).value)"
             class="mb-2"
           />
+          <v-btn
+            size="small"
+            variant="tonal"
+            class="mb-4"
+            @click="handleUpdateWalletId"
+            :disabled="walletInput === walletId"
+          >
+            Update Wallet ID
+          </v-btn>
+
           <v-alert type="warning" variant="outlined" density="compact" class="mb-4">
             Your wallet ID is the key to your credits. Do not share it.
           </v-alert>

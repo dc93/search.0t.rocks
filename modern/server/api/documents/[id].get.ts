@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
 
   const similarRecords = moreLikeThis
     ? await getSimilarRecords(record).catch(() => [])
-    : await getSimilarRecords(record).catch(() => [])
+    : []
 
   return {
     record,

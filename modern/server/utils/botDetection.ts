@@ -1,4 +1,5 @@
 import { standardDeviation } from 'simple-statistics'
+import crypto from 'crypto'
 
 const blacklistedIps = new Set<string>()
 const whitelistedApiKeys: string[] = []
@@ -99,5 +100,15 @@ export function createFakeResponse(json: boolean) {
     return { resultCount: 0, count: 0, records }
   }
 
-  return { resultCount: 0, count: 0, records }
+  // Non-JSON: return structure with field strings for template rendering
+  return {
+    resultCount: 0,
+    count: 0,
+    records: records.map((r) => ({
+      ...r,
+      fields: Object.entries(r)
+        .filter(([k]) => k !== 'id')
+        .map(([k, v]) => `${k}: ${v}`),
+    })),
+  }
 }

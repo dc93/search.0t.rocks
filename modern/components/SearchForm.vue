@@ -1,10 +1,25 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useSearch, QUERY_OPTIONS, QUERY_FIELD_MAP } from '~/composables/useSearch'
 
-const { queries, exact, maxQueries, addQuery, removeQuery, navigateToResults } = useSearch()
+const { queries, exact, maxQueries, addQuery, removeQuery, hasValidQuery, navigateToResults } = useSearch()
 
-function onSubmit() {
-  navigateToResults()
+const isSearching = ref(false)
+const snackbar = ref(false)
+const snackbarText = ref('')
+
+async function onSubmit() {
+  if (!hasValidQuery()) {
+    snackbarText.value = 'Enter at least one search value.'
+    snackbar.value = true
+    return
+  }
+  isSearching.value = true
+  try {
+    await navigateToResults()
+  } finally {
+    isSearching.value = false
+  }
 }
 </script>
 
@@ -79,10 +94,14 @@ function onSubmit() {
 
       <!-- Search button on first row -->
       <v-col md="2" class="d-flex justify-center">
-        <v-btn v-if="idx === 0" icon @click="onSubmit">
+        <v-btn v-if="idx === 0" icon @click="onSubmit" :loading="isSearching">
           <v-icon>mdi-magnify</v-icon>
         </v-btn>
       </v-col>
     </v-row>
+
+    <v-snackbar v-model="snackbar" :timeout="2000">
+      {{ snackbarText }}
+    </v-snackbar>
   </v-card>
 </template>

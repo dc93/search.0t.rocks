@@ -3,6 +3,7 @@ const navItems = [
   { title: 'Search', to: '/', icon: 'mdi-magnify' },
   { title: 'Map', to: '/map', icon: 'mdi-map' },
   { title: 'Exports', to: '/exports', icon: 'mdi-download' },
+  { title: 'Donations', to: '/donations', icon: 'mdi-heart' },
   { title: 'FAQ', to: '/faq', icon: 'mdi-help-circle' },
 ]
 </script>
