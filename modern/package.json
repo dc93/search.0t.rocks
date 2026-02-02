@@ -1,0 +1,32 @@
+{
+  "name": "search-platform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^3.14.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0",
+    "vuetify": "^3.7.0",
+    "@mdi/font": "^7.4.0",
+    "vite-plugin-vuetify": "^2.0.0",
+    "simple-statistics": "^7.8.0",
+    "axios": "^1.7.0",
+    "lodash-es": "^4.17.21",
+    "uuid": "^10.0.0",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/lodash-es": "^4.17.12",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.6.0",
+    "sass": "^1.80.0"
+  }
+}
