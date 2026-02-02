@@ -45,11 +45,8 @@ const navSections = [
       />
 
       <div class="d-flex align-center ml-1">
-        <!-- Sorint.lab logo -->
-        <svg width="120" height="28" viewBox="0 0 120 28" class="mr-3">
-          <text x="0" y="20" font-family="Inter, sans-serif" font-weight="700" font-size="17" fill="#f1f5f9" letter-spacing="-0.5">SORINT</text>
-          <text x="72" y="20" font-family="Inter, sans-serif" font-weight="700" font-size="17" fill="#e8530e" letter-spacing="-0.5">.lab</text>
-        </svg>
+        <!-- Sorint.lab logo (flame + text) -->
+        <img src="/sorint-logo.svg" alt="SORINT.lab" height="28" style="display: block" class="mr-3" />
         <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1); margin: 0 12px" />
         <v-icon color="primary" size="20" class="mr-1">mdi-shield-search</v-icon>
         <span style="font-weight: 600; font-size: 0.85rem; letter-spacing: -0.01em; color: #94a3b8">
@@ -87,13 +84,8 @@ const navSections = [
     >
       <!-- Sidebar header with logo -->
       <div style="height: 56px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(255,255,255,0.04)">
-        <svg v-if="!miniVariant" width="100" height="24" viewBox="0 0 120 28">
-          <text x="10" y="20" font-family="Inter, sans-serif" font-weight="700" font-size="16" fill="#f1f5f9" letter-spacing="-0.5">SORINT</text>
-          <text x="78" y="20" font-family="Inter, sans-serif" font-weight="700" font-size="16" fill="#e8530e" letter-spacing="-0.5">.lab</text>
-        </svg>
-        <svg v-else width="28" height="28" viewBox="0 0 28 28">
-          <text x="3" y="20" font-family="Inter, sans-serif" font-weight="700" font-size="18" fill="#e8530e">S</text>
-        </svg>
+        <img v-if="!miniVariant" src="/sorint-logo.svg" alt="SORINT.lab" height="22" style="display: block" />
+        <img v-else src="/sorint-icon.svg" alt="S" width="28" height="28" style="display: block" />
       </div>
 
       <template v-for="(section, si) in navSections" :key="si">
