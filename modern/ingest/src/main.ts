@@ -8,6 +8,7 @@ import { parseFile } from './parser.js'
 import { FieldNormalizer } from './normalizer.js'
 import { EsImporter } from './esImporter.js'
 import { SchemaDetector } from './schemaDetector.js'
+import { FileHashRegistry } from './hashRegistry.js'
 
 async function main() {
   const config = loadConfig()
@@ -43,20 +44,54 @@ async function main() {
   const schemaDetector = new SchemaDetector(aiConfig)
   await schemaDetector.init()
 
+  // File hash registry for dedup
+  const hashRegistry = new FileHashRegistry(config.completedDir || config.tempDir)
+  await hashRegistry.init()
+
   /**
    * Process a single file end-to-end:
+   * 0. Check file hash against registry (skip if already processed)
    * 1. Extract (if compressed)
-   * 2. Parse (streaming)
-   * 3. Normalize fields
-   * 4. Import to Solr in batches
-   * 5. Cleanup
+   * 2. AI schema detection
+   * 3. Parse (streaming)
+   * 4. Normalize fields
+   * 5. Import to Elasticsearch in batches
+   * 6. Register hash + Cleanup
    */
   async function processFile(filePath: string): Promise<void> {
     const fileName = basename(filePath)
     const sourceName = fileName.replace(/\.(gz|zip|tar|7z|rar|bz2|xz|jsonl|json|csv|tsv|txt|sql|dat|log)$/gi, '')
     const startTime = Date.now()
 
-    logger.info({ file: fileName }, 'Processing started')
+    // Step 0: Dedup check — skip files already processed
+    let fileHash: string
+    let fileSize: number
+    try {
+      const result = await hashRegistry.computeHash(filePath)
+      fileHash = result.hash
+      fileSize = result.fileSize
+
+      const existing = hashRegistry.isProcessed(fileHash)
+      if (existing) {
+        logger.info({
+          file: fileName,
+          hash: fileHash.substring(0, 12),
+          previouslyAs: existing.fileName,
+          processedAt: existing.processedAt,
+          records: existing.recordsImported,
+        }, 'SKIPPED — file already processed (hash match)')
+
+        // Remove the duplicate
+        await unlink(filePath).catch(() => {})
+        return
+      }
+    } catch (err) {
+      logger.warn({ err, file: fileName }, 'Could not compute file hash, proceeding anyway')
+      fileHash = ''
+      fileSize = 0
+    }
+
+    logger.info({ file: fileName, hash: fileHash.substring(0, 12) }, 'Processing started')
 
     let extractedFiles: string[] = []
 
@@ -131,7 +166,13 @@ async function main() {
         ...importer.stats,
       }, 'Processing complete')
 
-      // Step 6: Cleanup source file
+      // Register file hash so it won't be re-processed
+      if (fileHash) {
+        await hashRegistry.markProcessed(fileHash, fileName, fileSize, totalNormalized)
+        logger.info({ file: fileName, hash: fileHash.substring(0, 12) }, 'Hash registered in dedup registry')
+      }
+
+      // Cleanup source file
       if (config.completedDir) {
         await rename(filePath, join(config.completedDir, fileName)).catch(() => {
           // rename fails across devices — fallback to delete
