@@ -8,8 +8,11 @@ const domainInput = ref((route.query.domain as string) || '')
 const dedupEnabled = ref(true)
 const page = ref(parseInt(route.query.page as string || '1', 10))
 
+const activeUrl = ref((route.query.url as string) || '')
+
 interface DomainResponse {
   domain: string
+  urlFilter: string | null
   stats: {
     totalRecords: number
     uniqueEmails: number
@@ -17,6 +20,7 @@ interface DomainResponse {
     withPasswords: number
     passwordExposureRate: number
     topSources: { source: string; count: number }[]
+    topUrls: { url: string; count: number }[]
   }
   records: Record<string, unknown>[]
   page: number
@@ -30,6 +34,7 @@ const queryParams = computed(() => ({
   domain: route.query.domain || '',
   page: page.value,
   dedup: dedupEnabled.value ? 'true' : undefined,
+  url: activeUrl.value || undefined,
 }))
 
 const { data, pending, refresh } = await useFetch<DomainResponse>('/api/domain', {
@@ -40,7 +45,19 @@ const { data, pending, refresh } = await useFetch<DomainResponse>('/api/domain',
 function search() {
   if (!domainInput.value.trim()) return
   page.value = 1
+  activeUrl.value = ''
   router.push({ query: { domain: domainInput.value.trim(), dedup: dedupEnabled.value ? 'true' : undefined } })
+  refresh()
+}
+
+function filterByUrl(url: string) {
+  if (activeUrl.value === url) {
+    activeUrl.value = ''
+  } else {
+    activeUrl.value = url
+  }
+  page.value = 1
+  router.replace({ query: { ...route.query, url: activeUrl.value || undefined, page: undefined } })
   refresh()
 }
 
@@ -164,6 +181,44 @@ const riskColor = computed(() => {
               >
                 <span class="mono">{{ src.source }}</span>
                 <v-badge :content="src.count.toLocaleString()" inline color="error" />
+              </v-chip>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <!-- URL Filter -->
+      <v-row class="mb-6" v-if="data.stats.topUrls && data.stats.topUrls.length > 1">
+        <v-col cols="12">
+          <v-card class="pa-4">
+            <div class="d-flex align-center mb-3">
+              <v-icon size="18" color="primary" class="mr-2">mdi-filter-variant</v-icon>
+              <span style="font-weight: 500; font-size: 0.875rem">Filter by URL / Subdomain</span>
+              <v-chip
+                v-if="activeUrl"
+                size="x-small"
+                variant="flat"
+                color="warning"
+                class="ml-2"
+                closable
+                @click:close="filterByUrl(activeUrl)"
+              >
+                Filtering: {{ activeUrl }}
+              </v-chip>
+            </div>
+            <div class="d-flex flex-wrap" style="gap: 8px">
+              <v-chip
+                v-for="u in data.stats.topUrls"
+                :key="u.url"
+                :variant="activeUrl === u.url ? 'flat' : 'tonal'"
+                :color="activeUrl === u.url ? 'primary' : 'info'"
+                size="small"
+                style="cursor: pointer"
+                @click="filterByUrl(u.url)"
+              >
+                <v-icon start size="14">mdi-link-variant</v-icon>
+                <span class="mono">{{ u.url }}</span>
+                <v-badge :content="u.count.toLocaleString()" inline color="info" />
               </v-chip>
             </div>
           </v-card>
