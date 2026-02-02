@@ -1,0 +1,262 @@
+# Ingest Pipeline Configuration
+
+# Directory to watch for new files
+watchDir: /data/incoming
+
+# Directory for temporary extraction
+tempDir: /data/temp
+
+# Where to move failed files
+failedDir: /data/failed
+
+# Where to move completed files (set to null to delete after import)
+completedDir: null
+
+# Solr configuration
+solr:
+  servers:
+    - http://solr1:8983/solr/BigData/update
+  commitWithin: 30000      # Auto-commit within 30s
+  batchSize: 5000          # Documents per batch POST
+  maxConcurrent: 3         # Parallel batch uploads
+
+# File processing
+processing:
+  # Supported compressed formats (auto-detected by extension)
+  compressedExtensions:
+    - .gz
+    - .zip
+    - .tar.gz
+    - .tgz
+    - .7z
+    - .rar
+    - .bz2
+    - .xz
+
+  # Supported text formats
+  textExtensions:
+    - .jsonl
+    - .json
+    - .csv
+    - .tsv
+    - .txt
+    - .sql
+
+  # Max file size to process (0 = unlimited)
+  maxFileSizeBytes: 0
+
+  # Polling interval for new files (ms) — fallback if fs.watch fails
+  pollIntervalMs: 10000
+
+# Source tagging: auto-tag records with the source filename
+autoTagSource: true
+
+# Field normalizer — maps common alternative field names to schema fields.
+# Each schema field has a list of aliases (case-insensitive match).
+# The normalizer picks the FIRST alias that matches.
+fieldMapping:
+  firstName:
+    - first_name
+    - firstname
+    - fname
+    - name_first
+    - given_name
+    - givenname
+    - first
+    - prenom
+
+  lastName:
+    - last_name
+    - lastname
+    - lname
+    - name_last
+    - surname
+    - family_name
+    - familyname
+    - last
+
+  middleName:
+    - middle_name
+    - middlename
+    - mname
+
+  emails:
+    - email
+    - email_address
+    - emailaddress
+    - mail
+    - e-mail
+    - email_addresses
+    - user_email
+
+  usernames:
+    - username
+    - user_name
+    - user
+    - login
+    - login_name
+    - screen_name
+    - screenname
+    - nick
+    - nickname
+    - handle
+
+  passwords:
+    - password
+    - pass
+    - passwd
+    - pwd
+    - hash
+    - password_hash
+    - hashed_password
+    - passhash
+
+  phoneNumbers:
+    - phone
+    - phone_number
+    - phonenumber
+    - telephone
+    - tel
+    - mobile
+    - cell
+    - cellphone
+    - phone_numbers
+
+  address:
+    - street
+    - street_address
+    - streetaddress
+    - addr
+    - address1
+    - address_1
+    - home_address
+    - mailing_address
+    - full_address
+
+  city:
+    - town
+    - city_name
+    - locality
+
+  state:
+    - province
+    - region
+    - state_code
+    - state_province
+
+  zipCode:
+    - zip
+    - zip_code
+    - postal
+    - postal_code
+    - postalcode
+    - postcode
+
+  country:
+    - country_code
+    - country_name
+    - nation
+    - cc
+
+  domain:
+    - website
+    - site
+    - web
+    - url
+    - hostname
+
+  ips:
+    - ip
+    - ip_address
+    - ipaddress
+    - ip_addr
+    - ipaddr
+    - source_ip
+    - src_ip
+    - remote_ip
+
+  latLong:
+    - lat_long
+    - latlng
+    - latlong
+    - geo
+    - coordinates
+    - coords
+
+  gender:
+    - sex
+
+  birthYear:
+    - birth_year
+    - year_of_birth
+    - yob
+
+  vin:
+    - vehicle_vin
+    - vehicle_identification
+
+  VRN:
+    - license_plate
+    - plate
+    - plate_number
+    - registration
+    - vrn
+    - reg
+
+  source:
+    - data_source
+    - src
+    - origin
+    - breach
+    - database
+    - db
+    - leak
+
+  asn:
+    - as_number
+    - asn_number
+
+  asnOrg:
+    - as_org
+    - asn_org
+    - as_organization
+    - isp
+
+  income:
+    - salary
+    - annual_income
+
+  notes:
+    - note
+    - comment
+    - comments
+    - description
+    - bio
+
+  photographs:
+    - photo
+    - avatar
+    - picture
+    - profile_pic
+    - profile_picture
+    - image
+
+  dob:
+    - date_of_birth
+    - dateofbirth
+    - birthday
+    - birth_date
+    - birthdate
+
+# Fields that should be arrays in Solr
+arrayFields:
+  - emails
+  - usernames
+  - passwords
+  - phoneNumbers
+  - ips
+  - photographs
+  - photos
+  - links
+  - notes
+  - party

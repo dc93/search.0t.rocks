@@ -16,6 +16,19 @@ services:
       - solr
     restart: unless-stopped
 
+  # ── Data Ingest Pipeline ──────────────────────────────────
+  ingest:
+    build: ./ingest
+    volumes:
+      - ingest_incoming:/data/incoming    # Drop files here
+      - ingest_temp:/data/temp
+      - ingest_failed:/data/failed
+    depends_on:
+      - solr1
+    networks:
+      - solr
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     ports:
@@ -132,6 +145,9 @@ services:
 
 volumes:
   redis_data:
+  ingest_incoming:
+  ingest_temp:
+  ingest_failed:
 
 networks:
   solr:
