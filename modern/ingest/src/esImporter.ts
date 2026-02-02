@@ -1,19 +1,19 @@
-import axios, { AxiosError } from 'axios'
+import { Client } from '@elastic/elasticsearch'
 import type { IngestConfig } from './config.js'
 import { logger } from './logger.js'
 
 /**
- * Solr batch importer with backpressure control.
+ * Elasticsearch bulk importer with backpressure control.
  *
  * - Accumulates documents until batchSize is reached
- * - Posts batches to random Solr server
+ * - Uses the _bulk API for maximum throughput
  * - Limits concurrent uploads to maxConcurrent
- * - Retries on transient failures (5xx, network errors)
+ * - Retries on transient failures (5xx, connection errors)
  */
-export class SolrImporter {
-  private servers: string[]
+export class EsImporter {
+  private client: Client
+  private index: string
   private batchSize: number
-  private commitWithin: number
   private maxConcurrent: number
 
   private buffer: Record<string, unknown>[] = []
@@ -22,10 +22,14 @@ export class SolrImporter {
   private totalErrors = 0
 
   constructor(config: IngestConfig) {
-    this.servers = config.solr.servers
-    this.batchSize = config.solr.batchSize
-    this.commitWithin = config.solr.commitWithin
-    this.maxConcurrent = config.solr.maxConcurrent
+    this.client = new Client({
+      node: config.elasticsearch.url,
+      requestTimeout: 60000,
+      maxRetries: 3,
+    })
+    this.index = config.elasticsearch.index
+    this.batchSize = config.elasticsearch.batchSize
+    this.maxConcurrent = config.elasticsearch.maxConcurrent
   }
 
   get stats() {
@@ -45,7 +49,6 @@ export class SolrImporter {
     this.buffer.push(doc)
 
     if (this.buffer.length >= this.batchSize) {
-      // Backpressure: wait if we have too many in-flight
       while (this.inflight >= this.maxConcurrent) {
         await sleep(100)
       }
@@ -54,7 +57,7 @@ export class SolrImporter {
   }
 
   /**
-   * Flush remaining buffer and commit.
+   * Flush remaining buffer and wait for all in-flight.
    */
   async flush(): Promise<void> {
     while (this.buffer.length > 0) {
@@ -64,13 +67,17 @@ export class SolrImporter {
       await this.flushBuffer()
     }
 
-    // Wait for all in-flight to complete
     while (this.inflight > 0) {
       await sleep(100)
     }
 
-    // Explicit commit
-    await this.commit()
+    // Force refresh
+    try {
+      await this.client.indices.refresh({ index: this.index })
+      logger.info('Elasticsearch refresh sent')
+    } catch (err) {
+      logger.error({ err }, 'Elasticsearch refresh failed')
+    }
   }
 
   private async flushBuffer(): Promise<void> {
@@ -80,8 +87,7 @@ export class SolrImporter {
     this.inflight++
 
     try {
-      await this.postBatch(batch)
-      this.totalImported += batch.length
+      await this.bulkIndex(batch)
     } catch (err) {
       this.totalErrors += batch.length
       logger.error({ err, batchSize: batch.length }, 'Failed to import batch')
@@ -90,57 +96,68 @@ export class SolrImporter {
     }
   }
 
-  private async postBatch(
+  private async bulkIndex(
     batch: Record<string, unknown>[],
     retries = 3
   ): Promise<void> {
-    const server = this.servers[Math.floor(Math.random() * this.servers.length)]
+    // Build bulk body: alternating action/document lines
+    const operations = batch.flatMap((doc) => {
+      const id = doc.id as string | undefined
+      const body = { ...doc }
+      delete body.id
+
+      return [
+        { index: { _index: this.index, ...(id ? { _id: id } : {}) } },
+        body,
+      ]
+    })
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        await axios.post(
-          server,
-          batch,
-          {
-            params: { commitWithin: this.commitWithin },
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 60000,
-            maxContentLength: Infinity,
-            maxBodyLength: Infinity,
+        const result = await this.client.bulk({
+          operations,
+          refresh: false,
+        })
+
+        if (result.errors) {
+          let errorCount = 0
+          for (const item of result.items) {
+            const action = item.index || item.create
+            if (action?.error) {
+              errorCount++
+              if (errorCount <= 3) {
+                logger.warn(
+                  { type: action.error.type, reason: action.error.reason },
+                  'Bulk item error'
+                )
+              }
+            }
           }
-        )
+          this.totalErrors += errorCount
+          this.totalImported += batch.length - errorCount
+        } else {
+          this.totalImported += batch.length
+        }
+
         return
-      } catch (err) {
-        const status = (err as AxiosError)?.response?.status
+      } catch (err: any) {
+        const status = err?.meta?.statusCode
 
         // Client error (4xx) — don't retry
         if (status && status >= 400 && status < 500) {
-          logger.error({ status, attempt }, 'Solr rejected batch (4xx)')
+          logger.error({ status, attempt }, 'ES rejected batch (4xx)')
           throw err
         }
 
         // Transient error — retry with backoff
         if (attempt < retries) {
           const delay = attempt * 2000
-          logger.warn({ attempt, retries, delay }, 'Retrying batch...')
+          logger.warn({ attempt, retries, delay }, 'Retrying bulk...')
           await sleep(delay)
         } else {
           throw err
         }
       }
-    }
-  }
-
-  private async commit(): Promise<void> {
-    const server = this.servers[Math.floor(Math.random() * this.servers.length)]
-    try {
-      await axios.get(server.replace('/update', '/update'), {
-        params: { commit: true },
-        timeout: 30000,
-      })
-      logger.info('Solr commit sent')
-    } catch (err) {
-      logger.error({ err }, 'Solr commit failed')
     }
   }
 }

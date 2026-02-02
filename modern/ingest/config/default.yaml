@@ -12,13 +12,12 @@ failedDir: /data/failed
 # Where to move completed files (set to null to delete after import)
 completedDir: null
 
-# Solr configuration
-solr:
-  servers:
-    - http://solr1:8983/solr/BigData/update
-  commitWithin: 30000      # Auto-commit within 30s
-  batchSize: 5000          # Documents per batch POST
-  maxConcurrent: 3         # Parallel batch uploads
+# Elasticsearch configuration
+elasticsearch:
+  url: http://es01:9200
+  index: bigdata
+  batchSize: 5000          # Documents per bulk request
+  maxConcurrent: 3         # Parallel bulk uploads
 
 # File processing
 processing:

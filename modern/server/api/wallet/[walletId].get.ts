@@ -1,4 +1,4 @@
-import { getWalletBalance } from '../../utils/solr'
+import { getWalletBalance } from '../../utils/elasticsearch'
 import { markWalletRequested } from '../../utils/botDetection'
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/

@@ -1,5 +1,5 @@
 import { omit } from 'lodash-es'
-import { queryForDocs, getSimilarRecords } from '../../utils/solr'
+import { queryForDocs, getSimilarRecords } from '../../utils/elasticsearch'
 import {
   isAutomated,
   checkIPAutomatedSTDDEV,
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     return createFakeResponse(true)
   }
 
-  const result = await queryForDocs(`id:${id}`)
+  const result = await queryForDocs({ term: { _id: id } }, 1)
   const record = result.records[0]
 
   if (!record) {

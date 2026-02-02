@@ -1,4 +1,4 @@
-import { queryForDocsSpatial } from '../utils/solr'
+import { queryForDocsSpatial } from '../utils/elasticsearch'
 
 const LAT_LONG_REGEX = /^-?\d{1,3}(?:\.\d{1,20})?,-?\d{1,3}(?:\.\d{1,20})?$/
 
@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
     return { error: true, message: 'Distance (d) must be between 0.1 and 1000 km.' }
   }
 
-  const result = await queryForDocsSpatial(query.latLong, d).catch(() => ({
+  const [lat, lon] = query.latLong.split(',').map(Number)
+  const result = await queryForDocsSpatial(lat, lon, d).catch(() => ({
     numDocs: 0,
     records: [],
   }))

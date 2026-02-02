@@ -27,7 +27,7 @@ export default defineNuxtConfig({
   css: ['@mdi/font/css/materialdesignicons.min.css', '~/assets/main.scss'],
 
   runtimeConfig: {
-    solrServers: ['http://solr1:8983/solr/BigData/select'],
+    elasticsearchUrl: 'http://es01:9200',
     redisUrl: 'redis://redis:6379',
     public: {
       recordCount: '14,491,682,918',

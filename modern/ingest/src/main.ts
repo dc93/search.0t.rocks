@@ -6,7 +6,7 @@ import { FileWatcher } from './watcher.js'
 import { extractFile, cleanupExtracted } from './extractor.js'
 import { parseFile } from './parser.js'
 import { FieldNormalizer } from './normalizer.js'
-import { SolrImporter } from './solrImporter.js'
+import { EsImporter } from './esImporter.js'
 
 async function main() {
   const config = loadConfig()
@@ -14,9 +14,10 @@ async function main() {
   logger.info('=== Ingest Pipeline Starting ===')
   logger.info({
     watchDir: config.watchDir,
-    solrServers: config.solr.servers,
-    batchSize: config.solr.batchSize,
-    maxConcurrent: config.solr.maxConcurrent,
+    elasticsearchUrl: config.elasticsearch.url,
+    index: config.elasticsearch.index,
+    batchSize: config.elasticsearch.batchSize,
+    maxConcurrent: config.elasticsearch.maxConcurrent,
   })
 
   // Ensure directories exist
@@ -28,7 +29,7 @@ async function main() {
   }
 
   const normalizer = new FieldNormalizer(config)
-  const importer = new SolrImporter(config)
+  const importer = new EsImporter(config)
   const watcher = new FileWatcher(config)
 
   /**

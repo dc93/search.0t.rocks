@@ -1,21 +1,13 @@
 import { v4 as uuidv4 } from 'uuid'
 import { spawn } from 'child_process'
-import axios from 'axios'
 import {
   getWalletBalance,
   removeWalletBalance,
-} from '../utils/solr'
-import { buildQuery, sanitizeQuery } from '../utils/queryBuilder'
+  createExportJob,
+} from '../utils/elasticsearch'
+import { buildEsQuery } from '../utils/queryBuilder'
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/
-
-function getSolrExportsUpdateUrl(): string {
-  const config = useRuntimeConfig()
-  const servers = config.solrServers as string[]
-  return servers[Math.floor(Math.random() * servers.length)]
-    .replace('BigData', 'Exports')
-    .replace('select', 'update')
-}
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -61,7 +53,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const queryBuilt = buildQuery(requestedQuery)
+  const queryBuilt = buildEsQuery(requestedQuery)
   if ('error' in queryBuilt) {
     setResponseStatus(event, 400)
     return { error: true, message: queryBuilt.error }
@@ -69,43 +61,28 @@ export default defineEventHandler(async (event) => {
 
   const jobid = uuidv4()
 
-  let finalQuery = queryBuilt.query
-  if (queryBuilt.additionalQuery.length > 0) {
-    finalQuery = `(${finalQuery}) OR ${sanitizeQuery(queryBuilt.additionalQuery.join(' OR '))}`
-  }
-
   const payload = {
     status: 'started',
     jobid,
     cost,
-    query: finalQuery,
+    query: queryBuilt.queryDescription,
     exportCount,
     success: true,
     walletId: body.walletId,
   }
 
-  // Deduct credits asynchronously
+  // Deduct credits
   removeWalletBalance(body.walletId, cost).catch(console.error)
 
-  // Store export job in Solr
-  axios
-    .post(
-      getSolrExportsUpdateUrl(),
-      {
-        add: {
-          doc: {
-            id: jobid,
-            cost,
-            wallet: body.walletId,
-            query: finalQuery,
-            status: 'started',
-            count: exportCount,
-          },
-        },
-      },
-      { params: { commit: true } }
-    )
-    .catch(console.error)
+  // Store export job in Elasticsearch
+  createExportJob({
+    id: jobid,
+    cost,
+    wallet: body.walletId,
+    query: queryBuilt.queryDescription,
+    status: 'started',
+    count: exportCount,
+  }).catch(console.error)
 
   // Spawn export worker
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')

@@ -88,7 +88,16 @@ export class FieldNormalizer {
 
     // Merge lat/long from separate lat + lng fields
     if (!doc.latLong && doc._lat && doc._lng) {
-      doc.latLong = `${doc._lat},${doc._lng}`
+      doc.latLong = { lat: parseFloat(String(doc._lat)), lon: parseFloat(String(doc._lng)) }
+    }
+    // Convert string "lat,lon" to geo_point object for Elasticsearch
+    if (typeof doc.latLong === 'string') {
+      const parts = (doc.latLong as string).split(',').map(Number)
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        doc.latLong = { lat: parts[0], lon: parts[1] }
+      } else {
+        delete doc.latLong
+      }
     }
     delete doc._lat
     delete doc._lng

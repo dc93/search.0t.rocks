@@ -1,6 +1,6 @@
 import { omit, uniqBy } from 'lodash-es'
-import { queryForDocs } from '../utils/solr'
-import { buildQuery, sanitizeQuery } from '../utils/queryBuilder'
+import { queryForDocs } from '../utils/elasticsearch'
+import { buildEsQuery } from '../utils/queryBuilder'
 import {
   isAutomated,
   checkIPAutomatedSTDDEV,
@@ -43,15 +43,10 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const queryBuilt = buildQuery(requestedQuery)
+  const queryBuilt = buildEsQuery(requestedQuery)
   if ('error' in queryBuilt) {
     setResponseStatus(event, 400)
     return { error: true, message: queryBuilt.error }
-  }
-
-  if (!queryBuilt.query) {
-    setResponseStatus(event, 400)
-    return { error: true, message: 'No query provided.' }
   }
 
   let totalRecordCount = 0
@@ -64,19 +59,20 @@ export default defineEventHandler(async (event) => {
   totalRecordCount += recordsResponse.numDocs
   let records = [...recordsResponse.records]
 
-  // Additional query (email local-part, domain, name-based email)
+  // Additional queries (email local-part, domain, name-based email)
   const isExact = query.exact === 'true' || query.exact === '1' || query.exact === 'on'
-  if (queryBuilt.doAdditionalQuery && !isExact) {
-    const additionalQueryStr = sanitizeQuery(queryBuilt.additionalQuery.join(' OR '))
+  if (queryBuilt.additionalQueries.length > 0 && !isExact) {
     const limit = typeof query.sofreshandsoclean === 'string' ? 10000 : 100
 
-    const additionalResponse = await queryForDocs(additionalQueryStr, limit).catch(() => ({
-      numDocs: 0,
-      records: [] as SolrRecord[],
-    }))
+    for (const addlQuery of queryBuilt.additionalQueries) {
+      const additionalResponse = await queryForDocs(addlQuery, limit).catch(() => ({
+        numDocs: 0,
+        records: [] as SolrRecord[],
+      }))
 
-    totalRecordCount += additionalResponse.numDocs
-    records.push(...additionalResponse.records)
+      totalRecordCount += additionalResponse.numDocs
+      records.push(...additionalResponse.records)
+    }
   }
 
   // Deduplicate and shape results
@@ -94,6 +90,6 @@ export default defineEventHandler(async (event) => {
     resultCount: totalRecordCount,
     count: recordsFinal.length,
     records: recordsFinal,
-    query: queryBuilt.query,
+    query: queryBuilt.queryDescription,
   }
 })

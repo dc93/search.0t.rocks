@@ -1,4 +1,8 @@
-import type { QueryBuilderResult } from '~/types'
+/**
+ * Query builder: converts URL query params into Elasticsearch Query DSL.
+ *
+ * Returns a `bool` query with `must`, `should`, and `must_not` clauses.
+ */
 
 const COMMON_EMAIL_DOMAINS = [
   'gmail', 'yahoo', 'hotmail', 'outlook', 'aol', 'icloud', 'mail',
@@ -8,218 +12,198 @@ const COMMON_EMAIL_DOMAINS = [
   'btinternet', 'virginmedia', 'talktalk', 'sky', 'orange', 'tiscali',
 ]
 
-function sanitizeQuery(query: string): string {
-  return query
-    .replace(/[^\w\s$:.@\-*\u0400-\u04FF]/gi, '?')
-    .replace(/WRfKdFVogXnk82/g, '"')
+// Fields that use `keyword` type for exact matching
+const KEYWORD_FIELDS = new Set([
+  'country', 'state', 'gender', 'ethnicity', 'source', 'zipCode',
+  'autoMake', 'autoModel', 'autoYear', 'autoBody', 'autoClass',
+])
+
+// Fields that use `text` type (analyzed, supports partial match)
+const TEXT_FIELDS = new Set([
+  'firstName', 'lastName', 'middleName', 'emails', 'usernames',
+  'address', 'city', 'asnOrg', 'domain', 'vin', 'VRN',
+  'phoneNumbers', 'continent', 'dob',
+])
+
+export interface EsQueryResult {
+  query: Record<string, unknown>
+  additionalQueries: Record<string, unknown>[]
+  queryDescription: string
 }
 
-function wrap(value: string): string {
-  return `WRfKdFVogXnk82${value}WRfKdFVogXnk82`
-}
+export function buildEsQuery(
+  params: Record<string, string | string[]>
+): EsQueryResult | { error: string } {
+  const must: Record<string, unknown>[] = []
+  const should: Record<string, unknown>[] = []
+  const mustNot: Record<string, unknown>[] = []
+  const additionalQueries: Record<string, unknown>[] = []
+  const isExact = params.exact === 'true' || params.exact === '1'
+  const descriptions: string[] = []
 
-interface FieldHandler {
-  field: string
-  transform?: (value: string, exact?: boolean) => string
-  wrapExact?: boolean
-  wrapAlways?: boolean
-}
+  // All known searchable fields
+  const allFields = [...KEYWORD_FIELDS, ...TEXT_FIELDS, 'passwords', 'ips', 'asn', 'birthYear']
 
-const FIELD_HANDLERS: Record<string, FieldHandler> = {
-  firstName: { field: 'firstName', transform: (v) => v.replace(' ', '?') },
-  lastName: { field: 'lastName', transform: (v) => v.replace(' ', '?') },
-  birthYear: { field: 'birthYear' },
-  ips: { field: 'ips', transform: (v) => wrap(v) },
-  asn: { field: 'asn' },
-  asnOrg: { field: 'asnOrg', wrapAlways: true },
-  country: { field: 'country', wrapAlways: true },
-  continent: { field: 'continent', wrapAlways: true },
-  source: { field: 'source', wrapAlways: true },
-  address: { field: 'address', wrapAlways: true },
-  city: { field: 'city' },
-  zipCode: { field: 'zipCode' },
-  state: { field: 'state' },
-  usernames: { field: 'usernames', wrapExact: true },
-}
+  for (const field of allFields) {
+    const positiveVal = params[field]
+    const negativeVal = params[`not${field}`]
 
-export function buildQuery(
-  requestedQuery: Record<string, string | string[]>
-): QueryBuilderResult | { error: string } {
-  const query: string[] = []
-  const orQuery: string[] = []
-  const notQuery: string[] = []
-  const additionalQuery: string[] = []
-  let doAdditionalQuery = false
-  const isExact = !!requestedQuery.exact
+    if (positiveVal !== undefined) {
+      const values = Array.isArray(positiveVal) ? positiveVal : [positiveVal]
 
-  // Handle standard fields
-  for (const [key, handler] of Object.entries(FIELD_HANDLERS)) {
-    const value = requestedQuery[key]
-    const notValue = requestedQuery[`not${key}`]
-
-    if (value !== undefined && typeof value === 'string') {
-      let processed = handler.transform ? handler.transform(value, isExact) : value
-      if (handler.wrapAlways) {
-        processed = wrap(processed)
-      } else if (handler.wrapExact && isExact) {
-        processed = wrap(processed)
+      // Passwords with multiple values: OR logic (extended hash search)
+      if (field === 'passwords' && values.length > 1) {
+        must.push({
+          bool: {
+            should: values.map((pw) => ({ term: { passwords: pw } })),
+            minimum_should_match: 1,
+          },
+        })
+        descriptions.push(`passwords=[${values.length} variants]`)
+        continue
       }
-      query.push(`${handler.field}:${processed}`)
-    }
 
-    if (notValue !== undefined) {
-      const values = Array.isArray(notValue) ? notValue : [notValue]
       for (const v of values) {
-        const processed = handler.transform ? handler.transform(v, isExact) : v
-        notQuery.push(`${handler.field}:${handler.wrapAlways ? wrap(processed) : processed}`)
+        if (!v.trim()) continue
+        const clause = buildFieldClause(field, v.trim(), isExact)
+        if (clause) {
+          must.push(clause)
+          descriptions.push(`${field}=${v}`)
+        }
+      }
+    }
+
+    if (negativeVal !== undefined) {
+      const values = Array.isArray(negativeVal) ? negativeVal : [negativeVal]
+      for (const v of values) {
+        if (!v.trim()) continue
+        const clause = buildFieldClause(field, v.trim(), isExact)
+        if (clause) mustNot.push(clause)
       }
     }
   }
 
-  // Handle domain (special exact logic)
-  if (requestedQuery.domain !== undefined && typeof requestedQuery.domain === 'string') {
-    const v = requestedQuery.domain.replace(' ', '?')
-    query.push(isExact ? `domain:${wrap(v)}` : `domain:${v}`)
-  }
-  if (requestedQuery.notdomain !== undefined) {
-    const values = Array.isArray(requestedQuery.notdomain)
-      ? requestedQuery.notdomain
-      : [requestedQuery.notdomain]
-    for (const v of values) {
-      notQuery.push(`domain:${wrap(v.replace(' ', '?'))}`)
-    }
-  }
+  // Handle emails: additional queries for local-part and domain
+  if (params.emails !== undefined && typeof params.emails === 'string') {
+    const email = params.emails
+    const parts = email.split('@')
 
-  // Handle firstName + lastName additional email query
-  if (
-    requestedQuery.firstName &&
-    requestedQuery.lastName &&
-    typeof requestedQuery.firstName === 'string' &&
-    typeof requestedQuery.lastName === 'string' &&
-    !isExact
-  ) {
-    additionalQuery.push(
-      `emails:${requestedQuery.firstName.replace(' ', '?')}?${requestedQuery.lastName.replace(' ', '?')}`
-    )
-    doAdditionalQuery = true
-  }
+    if (parts.length === 2 && !email.includes('*')) {
+      additionalQueries.push({ match_phrase: { emails: parts[0] } })
 
-  // Handle emails (complex logic)
-  if (requestedQuery.emails !== undefined && typeof requestedQuery.emails === 'string') {
-    const email = requestedQuery.emails
-    const hasWildcard = email.includes('*')
-    const emailNormalized = email.replace('@', '?')
-
-    if (hasWildcard) {
-      query.push(`emails:${emailNormalized}`)
-    } else {
-      query.push(isExact ? `emails:${wrap(emailNormalized)}` : `emails:${emailNormalized}`)
-    }
-
-    const emailSplit = email.split('@')
-
-    if (!hasWildcard) {
-      additionalQuery.push(`emails:${wrap(emailSplit[0])}`)
-    }
-
-    doAdditionalQuery = true
-
-    if (emailSplit.length === 2) {
-      const domain = emailSplit[1]
+      const domain = parts[1]
       const isCommon = COMMON_EMAIL_DOMAINS.some((d) =>
         domain.toLowerCase().startsWith(d)
       )
       if (!isCommon) {
-        additionalQuery.push(`emails:${domain}`)
-      }
-    }
-  }
-  if (requestedQuery.notemails !== undefined) {
-    const values = Array.isArray(requestedQuery.notemails)
-      ? requestedQuery.notemails
-      : [requestedQuery.notemails]
-    for (const v of values) {
-      notQuery.push(`emails:${wrap(v.replace('@', '?'))}`)
-    }
-  }
-
-  // Handle VRN
-  if (requestedQuery.VRN !== undefined && typeof requestedQuery.VRN === 'string') {
-    query.push(`VRN:${requestedQuery.VRN.toLowerCase()}`)
-  }
-  if (requestedQuery.notVRN !== undefined) {
-    const values = Array.isArray(requestedQuery.notVRN)
-      ? requestedQuery.notVRN
-      : [requestedQuery.notVRN]
-    for (const v of values) {
-      notQuery.push(`VRN:${v.toLowerCase()}`)
-    }
-  }
-
-  // Handle phoneNumbers
-  if (requestedQuery.phoneNumbers !== undefined && typeof requestedQuery.phoneNumbers === 'string') {
-    const digits = requestedQuery.phoneNumbers.replace(/\D+/g, '')
-    query.push(`phoneNumbers:${wrap(digits)}`)
-    if (isExact) {
-      additionalQuery.push(`phoneNumbers:1${digits}`, `phoneNumbers:7${digits}`)
-      doAdditionalQuery = true
-    }
-  }
-  if (requestedQuery.notphoneNumbers !== undefined) {
-    const values = Array.isArray(requestedQuery.notphoneNumbers)
-      ? requestedQuery.notphoneNumbers
-      : [requestedQuery.notphoneNumbers]
-    for (const v of values) {
-      notQuery.push(`phoneNumbers:${v}`)
-    }
-  }
-
-  // Handle passwords
-  if (requestedQuery.passwords !== undefined) {
-    if (typeof requestedQuery.passwords === 'string') {
-      query.push(`passwords:${requestedQuery.passwords}`)
-    } else if (Array.isArray(requestedQuery.passwords)) {
-      for (const pw of requestedQuery.passwords) {
-        orQuery.push(`passwords:${wrap(pw)}`)
-      }
-    }
-  }
-  if (requestedQuery.notpasswords !== undefined) {
-    const values = Array.isArray(requestedQuery.notpasswords)
-      ? requestedQuery.notpasswords
-      : [requestedQuery.notpasswords]
-    for (const v of values) {
-      notQuery.push(`passwords:${v}`)
-    }
-  }
-
-  // Handle VIN
-  if (requestedQuery.vin !== undefined) {
-    if (typeof requestedQuery.vin === 'string') {
-      query.push(`vin:${requestedQuery.vin}`)
-    } else if (Array.isArray(requestedQuery.vin)) {
-      for (const v of requestedQuery.vin) {
-        orQuery.push(`vin:${wrap(v)}`)
+        additionalQueries.push({ match: { emails: domain } })
       }
     }
   }
 
-  // Build final query string
-  let queryBuilt = sanitizeQuery(query.join(' AND '))
-
-  if (orQuery.length > 0) {
-    const orPart = sanitizeQuery(orQuery.join(' OR '))
-    queryBuilt = query.length > 0 ? `${queryBuilt} OR ${orPart}` : orPart
+  // Handle firstName + lastName: additional email-based wildcard
+  if (
+    params.firstName &&
+    params.lastName &&
+    typeof params.firstName === 'string' &&
+    typeof params.lastName === 'string' &&
+    !isExact
+  ) {
+    additionalQueries.push({
+      wildcard: {
+        'emails.keyword': {
+          value: `*${params.firstName.toLowerCase()}*${params.lastName.toLowerCase()}*`,
+        },
+      },
+    })
   }
 
-  if (notQuery.length > 0) {
-    if (query.length === 0) {
-      return { error: 'Cannot use NOT queries without a positive query.' }
-    }
-    queryBuilt += ` NOT ${sanitizeQuery(notQuery.join(' NOT '))}`
+  if (must.length === 0 && should.length === 0) {
+    return { error: 'No query provided.' }
   }
 
-  return { query: queryBuilt, additionalQuery, doAdditionalQuery }
+  if (must.length === 0 && mustNot.length > 0) {
+    return { error: 'Cannot use NOT queries without a positive query.' }
+  }
+
+  const boolQuery: Record<string, unknown> = {}
+  if (must.length > 0) boolQuery.must = must
+  if (should.length > 0) {
+    boolQuery.should = should
+    boolQuery.minimum_should_match = 1
+  }
+  if (mustNot.length > 0) boolQuery.must_not = mustNot
+
+  return {
+    query: { bool: boolQuery },
+    additionalQueries,
+    queryDescription: descriptions.join(', '),
+  }
 }
 
-export { sanitizeQuery }
+function buildFieldClause(
+  field: string,
+  value: string,
+  exact: boolean
+): Record<string, unknown> | null {
+  if (!value) return null
+
+  // Keyword fields → always exact term match
+  if (KEYWORD_FIELDS.has(field)) {
+    return { term: { [field]: value } }
+  }
+
+  // IP addresses → exact term
+  if (field === 'ips') return { term: { ips: value } }
+
+  // ASN → numeric
+  if (field === 'asn') {
+    const num = parseInt(value, 10)
+    return isNaN(num) ? null : { term: { asn: num } }
+  }
+
+  // Birth year → exact
+  if (field === 'birthYear') return { term: { birthYear: value } }
+
+  // Passwords → exact term (hashes, plaintext)
+  if (field === 'passwords') return { term: { passwords: value } }
+
+  // Phone numbers → wildcard on digits
+  if (field === 'phoneNumbers') {
+    const digits = value.replace(/\D+/g, '')
+    if (digits.length < 7) return null
+    return { wildcard: { phoneNumbers: { value: `*${digits}*` } } }
+  }
+
+  // VIN → lowercase exact
+  if (field === 'vin') return { term: { vin: value.toLowerCase() } }
+
+  // VRN → analyzed match
+  if (field === 'VRN') return { match: { VRN: value } }
+
+  // Emails → wildcard if *, otherwise match/match_phrase
+  if (field === 'emails') {
+    if (value.includes('*')) {
+      return { wildcard: { 'emails.keyword': { value: value.toLowerCase() } } }
+    }
+    return exact
+      ? { match_phrase: { emails: value } }
+      : { match: { emails: { query: value, operator: 'and' } } }
+  }
+
+  // Usernames → phrase for exact, match for fuzzy
+  if (field === 'usernames') {
+    return exact
+      ? { match_phrase: { usernames: value } }
+      : { match: { usernames: { query: value, operator: 'and' } } }
+  }
+
+  // Other text fields
+  if (TEXT_FIELDS.has(field)) {
+    return exact
+      ? { match_phrase: { [field]: value } }
+      : { match: { [field]: { query: value, operator: 'and' } } }
+  }
+
+  return { match: { [field]: value } }
+}

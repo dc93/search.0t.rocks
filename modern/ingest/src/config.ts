@@ -7,9 +7,9 @@ export interface IngestConfig {
   tempDir: string
   failedDir: string
   completedDir: string | null
-  solr: {
-    servers: string[]
-    commitWithin: number
+  elasticsearch: {
+    url: string
+    index: string
     batchSize: number
     maxConcurrent: number
   }
