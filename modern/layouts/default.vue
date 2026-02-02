@@ -9,6 +9,7 @@ const navSections = [
     items: [
       { title: 'Dashboard', to: '/', icon: 'mdi-view-dashboard-outline' },
       { title: 'Search', to: '/search', icon: 'mdi-magnify' },
+      { title: 'Domain Intel', to: '/domain', icon: 'mdi-web-check' },
       { title: 'Geospatial', to: '/map', icon: 'mdi-earth' },
       { title: 'Graph Explorer', to: '/visualize', icon: 'mdi-graph-outline' },
     ],
