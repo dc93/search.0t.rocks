@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NUXT_ELASTICSEARCH_URL=http://es01:9200
+      - NUXT_REDIS_URL=redis://redis:6379
+      - NUXT_PUBLIC_RECORD_COUNT=0
+    depends_on:
+      - es01
+      - redis
+    networks:
+      - app
+    restart: unless-stopped
+
+  # ── Data Ingest Pipeline ──────────────────────────────────
+  ingest:
+    build: ./ingest
+    volumes:
+      - ingest_incoming:/data/incoming    # Drop files here
+      - ingest_temp:/data/temp
+      - ingest_failed:/data/failed
+    depends_on:
+      - es01
+    networks:
+      - app
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app
+    restart: unless-stopped
+
+  # ── Elasticsearch Cluster ─────────────────────────────────
+  es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=bigdata-cluster
+      - discovery.seed_hosts=es02,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es01_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - app
+    restart: unless-stopped
+
+  es02:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.name=bigdata-cluster
+      - discovery.seed_hosts=es01,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es02_data:/usr/share/elasticsearch/data
+    networks:
+      - app
+    restart: unless-stopped
+
+  es03:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: es03
+    environment:
+      - node.name=es03
+      - cluster.name=bigdata-cluster
+      - discovery.seed_hosts=es01,es02
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es03_data:/usr/share/elasticsearch/data
+    networks:
+      - app
+    restart: unless-stopped
+
+  # ── Kibana (optional, for monitoring) ─────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://es01:9200
+      - xpack.security.enabled=false
+    ports:
+      - "5601:5601"
+    depends_on:
+      - es01
+    networks:
+      - app
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  es01_data:
+  es02_data:
+  es03_data:
+  ingest_incoming:
+  ingest_temp:
+  ingest_failed:
+
+networks:
+  app:

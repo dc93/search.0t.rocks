@@ -1,0 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #0a0e17;
+  color: #e2e8f0;
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+#__nuxt { height: 100%; }
+
+.v-application {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  background: #0a0e17 !important;
+}
+
+a {
+  color: #3b82f6;
+  text-decoration: none;
+  transition: color 0.15s ease;
+  &:hover { color: #60a5fa; }
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), 0 0 60px rgba(59, 130, 246, 0.05);
+}
+
+// --- Sidebar ---
+.app-sidebar {
+  background: #0f1520 !important;
+  border-right: 1px solid rgba(59, 130, 246, 0.1) !important;
+
+  .v-list-item {
+    margin: 2px 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    color: #94a3b8;
+
+    &:hover {
+      background: rgba(59, 130, 246, 0.08);
+      color: #e2e8f0;
+    }
+
+    &.v-list-item--active {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      .v-icon { color: #3b82f6; }
+    }
+
+    .v-icon { color: #64748b; transition: color 0.2s ease; }
+  }
+}
+
+// --- Stat cards ---
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: rgba(59, 130, 246, 0.2);
+    transform: translateY(-2px);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--stat-color, #3b82f6), transparent);
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+  }
+
+  .stat-icon {
+    position: absolute;
+    right: 16px; top: 16px;
+    opacity: 0.12;
+    font-size: 48px;
+  }
+}
+
+// --- Data table ---
+.ti-table {
+  .v-table { background: transparent !important; }
+
+  thead th {
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  tbody tr {
+    transition: background 0.15s ease;
+    &:hover { background: rgba(59, 130, 246, 0.04) !important; }
+    td {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+      font-size: 0.875rem;
+    }
+  }
+}
+
+// --- Field tags for records ---
+.field-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin: 2px 4px 2px 0;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  border-radius: 6px;
+  font-size: 0.8rem;
+
+  .field-key {
+    color: #64748b;
+    font-weight: 500;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .field-value {
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+}
+
+// --- Search panel ---
+.search-panel {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(6, 182, 212, 0.03) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+// --- Page header ---
+.page-header {
+  margin-bottom: 24px;
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #f1f5f9;
+  }
+
+  .page-subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 4px;
+  }
+}
+
+// --- Scrollbar ---
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0e17; }
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+  &:hover { background: #334155; }
+}
+
+// --- Pulse dot ---
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  display: inline-block;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+.border-subtle {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
