@@ -25,16 +25,26 @@ const INDEX_EXPORTS = 'exports'
 export async function queryForDocs(
   esQuery: Record<string, unknown>,
   limit = 100,
-  from = 0
+  from = 0,
+  options?: { dedupField?: string }
 ): Promise<SolrResponse> {
   const client = getClient()
-  const { hits } = await client.search({
+
+  const searchParams: Record<string, unknown> = {
     index: INDEX_DATA,
     size: limit,
     from,
     query: esQuery as any,
     _source: true,
-  })
+  }
+
+  // Field collapsing: returns only 1 result per unique value of the given
+  // keyword field. Removes duplicate credentials across different sources.
+  if (options?.dedupField) {
+    searchParams.collapse = { field: options.dedupField }
+  }
+
+  const { hits } = await client.search(searchParams)
 
   return {
     numDocs: typeof hits.total === 'number' ? hits.total : hits.total?.value ?? 0,

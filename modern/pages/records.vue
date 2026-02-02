@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { SolrRecord } from '~/types'
 
 interface RecordsResponse {
@@ -12,10 +12,37 @@ interface RecordsResponse {
 }
 
 const route = useRoute()
+const router = useRouter()
 
-const { data, pending, error } = await useFetch<RecordsResponse>('/api/records', {
-  query: route.query,
+// Dedup toggle: adds ?dedup=auto to re-fetch with field collapsing
+const dedupEnabled = ref(route.query.dedup === 'auto')
+
+const currentQuery = computed(() => {
+  const q = { ...route.query }
+  if (dedupEnabled.value) {
+    q.dedup = 'auto'
+  } else {
+    delete q.dedup
+  }
+  return q
+})
+
+const { data, pending, error, refresh } = await useFetch<RecordsResponse>('/api/records', {
+  query: currentQuery,
   timeout: 30000,
+})
+
+watch(dedupEnabled, () => {
+  page.value = 1
+  // Update URL to reflect dedup state (allows sharing)
+  const q = { ...route.query }
+  if (dedupEnabled.value) {
+    q.dedup = 'auto'
+  } else {
+    delete q.dedup
+  }
+  router.replace({ query: q })
+  refresh()
 })
 
 const page = ref(1)
@@ -68,6 +95,20 @@ const totalPages = computed(() => {
         <span style="font-size: 0.75rem; color: #475569" v-if="data.query">
           Query: <span class="mono">{{ data.query }}</span>
         </span>
+
+        <v-spacer />
+
+        <!-- Dedup toggle -->
+        <v-chip
+          :variant="dedupEnabled ? 'flat' : 'outlined'"
+          :color="dedupEnabled ? 'primary' : undefined"
+          size="small"
+          @click="dedupEnabled = !dedupEnabled"
+          style="cursor: pointer"
+        >
+          <v-icon start size="14">mdi-filter-remove-outline</v-icon>
+          Hide Duplicates
+        </v-chip>
       </div>
 
       <RecordCard v-for="record in paginatedRecords" :key="record.id" :record="record" />

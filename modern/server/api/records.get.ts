@@ -49,9 +49,42 @@ export default defineEventHandler(async (event) => {
     return { error: true, message: queryBuilt.error }
   }
 
+  // Dedup: collapse results by a key field to hide duplicate credentials.
+  // The `dedup` query param picks the collapse strategy:
+  //   dedup=email  → collapse on emails.keyword
+  //   dedup=auto   → auto-pick based on which field was searched
+  //   (absent)     → no dedup, show all results
+  const dedupParam = query.dedup as string | undefined
+  let dedupField: string | undefined
+
+  if (dedupParam === 'auto') {
+    // Pick the best field to dedup on based on what was searched
+    const searchedFields = Object.keys(requestedQuery)
+    if (searchedFields.includes('emails')) dedupField = 'emails.keyword'
+    else if (searchedFields.includes('usernames')) dedupField = 'usernames.keyword'
+    else if (searchedFields.includes('phoneNumbers')) dedupField = 'phoneNumbers.keyword'
+    else if (searchedFields.includes('passwords')) dedupField = 'passwords'
+    else if (searchedFields.includes('firstName') || searchedFields.includes('lastName')) dedupField = 'emails.keyword'
+  } else if (dedupParam) {
+    // Map friendly names to ES keyword fields
+    const dedupMap: Record<string, string> = {
+      email: 'emails.keyword',
+      emails: 'emails.keyword',
+      username: 'usernames.keyword',
+      usernames: 'usernames.keyword',
+      phone: 'phoneNumbers.keyword',
+      password: 'passwords',
+      passwords: 'passwords',
+      ip: 'ips',
+    }
+    dedupField = dedupMap[dedupParam] ?? undefined
+  }
+
+  const queryOpts = dedupField ? { dedupField } : undefined
+
   let totalRecordCount = 0
 
-  const recordsResponse = await queryForDocs(queryBuilt.query).catch(() => ({
+  const recordsResponse = await queryForDocs(queryBuilt.query, 100, 0, queryOpts).catch(() => ({
     numDocs: 0,
     records: [] as SolrRecord[],
   }))
@@ -65,7 +98,7 @@ export default defineEventHandler(async (event) => {
     const limit = typeof query.sofreshandsoclean === 'string' ? 10000 : 100
 
     for (const addlQuery of queryBuilt.additionalQueries) {
-      const additionalResponse = await queryForDocs(addlQuery, limit).catch(() => ({
+      const additionalResponse = await queryForDocs(addlQuery, limit, 0, queryOpts).catch(() => ({
         numDocs: 0,
         records: [] as SolrRecord[],
       }))
