@@ -1,4 +1,3 @@
-import { queryForDocs } from '../utils/elasticsearch'
 import { Client } from '@elastic/elasticsearch'
 
 function getClient(): Client {
@@ -23,18 +22,52 @@ export default defineEventHandler(async (event) => {
   const perPage = Math.min(parseInt(query.perPage as string || '50', 10), 200)
   const from = (page - 1) * perPage
   const dedup = query.dedup === 'true' || query.dedup === '1'
+  const urlFilter = (query.url as string || '').trim().toLowerCase()
 
   const client = getClient()
 
-  // Main query: match emails ending with @domain
-  const esQuery = {
-    bool: {
-      should: [
-        { wildcard: { 'emails.keyword': { value: `*@${domain}`, case_insensitive: true } } },
-        { match: { domain } },
-      ],
-      minimum_should_match: 1,
-    },
+  // Base query: match emails ending with @domain OR domain field
+  const baseConditions: Record<string, unknown>[] = [
+    { wildcard: { 'emails.keyword': { value: `*@${domain}`, case_insensitive: true } } },
+    { match: { domain } },
+  ]
+
+  // Build query — with optional URL sub-filter
+  let esQuery: Record<string, unknown>
+
+  if (urlFilter) {
+    // Filter within the domain for a specific URL/subdomain
+    esQuery = {
+      bool: {
+        must: [
+          {
+            bool: {
+              should: baseConditions,
+              minimum_should_match: 1,
+            },
+          },
+        ],
+        filter: [
+          {
+            bool: {
+              should: [
+                { wildcard: { 'emails.keyword': { value: `*@${urlFilter}`, case_insensitive: true } } },
+                { wildcard: { 'emails.keyword': { value: `*@*.${urlFilter}`, case_insensitive: true } } },
+                { match_phrase: { domain: urlFilter } },
+              ],
+              minimum_should_match: 1,
+            },
+          },
+        ],
+      },
+    }
+  } else {
+    esQuery = {
+      bool: {
+        should: baseConditions,
+        minimum_should_match: 1,
+      },
+    }
   }
 
   // Fetch records with optional dedup
@@ -50,7 +83,7 @@ export default defineEventHandler(async (event) => {
     searchParams.collapse = { field: 'emails.keyword' }
   }
 
-  // Run main search + aggregations in parallel
+  // Run search + aggregations in parallel
   const [searchResult, aggsResult] = await Promise.all([
     client.search(searchParams),
     client.search({
@@ -66,8 +99,9 @@ export default defineEventHandler(async (event) => {
         top_sources: {
           terms: { field: 'source', size: 10 },
         },
-        password_types: {
-          terms: { field: 'passwords', size: 5 },
+        // Aggregate URLs/subdomains from email addresses
+        top_urls: {
+          terms: { field: 'domain', size: 30 },
         },
       },
     }),
@@ -82,7 +116,6 @@ export default defineEventHandler(async (event) => {
     ...(h._source as Record<string, unknown>),
   }))
 
-  // Extract aggregation results
   const aggs = aggsResult.aggregations as Record<string, any> | undefined
 
   const stats = {
@@ -97,10 +130,15 @@ export default defineEventHandler(async (event) => {
       source: b.key,
       count: b.doc_count,
     })),
+    topUrls: (aggs?.top_urls?.buckets ?? []).map((b: any) => ({
+      url: b.key,
+      count: b.doc_count,
+    })),
   }
 
   return {
     domain,
+    urlFilter: urlFilter || null,
     stats,
     records,
     page,
