@@ -247,7 +247,20 @@ fieldMapping:
     - birth_date
     - birthdate
 
-# Fields that should be arrays in Solr
+# AI Schema Detection (Z.AI GLM-4.7)
+# When the deterministic normalizer can't resolve a field, the AI detector
+# samples the file and asks GLM-4.7 to infer the mapping. One API call per
+# unique file structure — results are cached on disk.
+aiSchemaDetection:
+  enabled: true
+  apiKey: ""                  # Your Z.AI API key (or set ZAI_API_KEY env var)
+  baseUrl: https://api.z.ai/api/paas/v4/chat/completions
+  model: glm-4.7
+  sampleLines: 50             # Number of lines to sample per file
+  cacheDir: /data/schema-cache
+  temperature: 0.1            # Low temperature for deterministic output
+
+# Fields that should be arrays in Elasticsearch
 arrayFields:
   - emails
   - usernames

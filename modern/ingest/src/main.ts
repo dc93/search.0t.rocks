@@ -7,6 +7,7 @@ import { extractFile, cleanupExtracted } from './extractor.js'
 import { parseFile } from './parser.js'
 import { FieldNormalizer } from './normalizer.js'
 import { EsImporter } from './esImporter.js'
+import { SchemaDetector } from './schemaDetector.js'
 
 async function main() {
   const config = loadConfig()
@@ -18,6 +19,7 @@ async function main() {
     index: config.elasticsearch.index,
     batchSize: config.elasticsearch.batchSize,
     maxConcurrent: config.elasticsearch.maxConcurrent,
+    aiSchema: config.aiSchemaDetection.enabled ? 'enabled' : 'disabled',
   })
 
   // Ensure directories exist
@@ -31,6 +33,15 @@ async function main() {
   const normalizer = new FieldNormalizer(config)
   const importer = new EsImporter(config)
   const watcher = new FileWatcher(config)
+
+  // AI schema detector (Z.AI GLM-4.7)
+  const aiConfig = {
+    ...config.aiSchemaDetection,
+    // Allow env var override for the API key
+    apiKey: process.env.ZAI_API_KEY || config.aiSchemaDetection.apiKey,
+  }
+  const schemaDetector = new SchemaDetector(aiConfig)
+  await schemaDetector.init()
 
   /**
    * Process a single file end-to-end:
@@ -58,7 +69,13 @@ async function main() {
       let totalNormalized = 0
       let totalSkipped = 0
 
-      // Step 2-4: Parse → Normalize → Import (per extracted file)
+      // Step 2: AI schema detection (one call per unique file structure)
+      for (const textFile of extractedFiles) {
+        const aiMapping = await schemaDetector.detect(textFile)
+        normalizer.setAiSchema(aiMapping)
+      }
+
+      // Step 3-5: Parse → Normalize → Import (per extracted file)
       for (const textFile of extractedFiles) {
         logger.info({ file: basename(textFile) }, 'Parsing...')
 
@@ -95,8 +112,11 @@ async function main() {
         }
       }
 
-      // Step 5: Flush remaining buffer
+      // Step 6: Flush remaining buffer
       await importer.flush()
+
+      // Clear AI overrides for next file
+      normalizer.clearAiSchema()
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       const rate = Math.round(totalNormalized / (parseFloat(elapsed) || 1))

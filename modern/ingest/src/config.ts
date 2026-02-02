@@ -22,6 +22,15 @@ export interface IngestConfig {
   autoTagSource: boolean
   fieldMapping: Record<string, string[]>
   arrayFields: string[]
+  aiSchemaDetection: {
+    enabled: boolean
+    apiKey: string
+    baseUrl: string
+    model: string
+    sampleLines: number
+    cacheDir: string
+    temperature: number
+  }
 }
 
 export function loadConfig(): IngestConfig {

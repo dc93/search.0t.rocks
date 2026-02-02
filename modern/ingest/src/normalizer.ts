@@ -1,12 +1,14 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { IngestConfig } from './config.js'
+import type { SchemaMapping } from './schemaDetector.js'
 import { logger } from './logger.js'
 
 /**
  * Field normalizer: maps arbitrary source field names to the canonical
- * Solr schema fields using the alias table from config.
+ * schema fields using the alias table from config + optional AI-detected overrides.
  *
  * - Builds a reverse lookup map: alias (lowercase) → schemaField
+ * - Accepts AI-detected SchemaMapping as override for unknown fields
  * - Wraps array-typed fields in arrays
  * - Generates a UUID if `id` is missing
  * - Optionally tags with `source`
@@ -16,6 +18,9 @@ export class FieldNormalizer {
   private aliasMap: Map<string, string>
   private arrayFields: Set<string>
   private autoTagSource: boolean
+
+  /** AI-detected field overrides for the current file (originalField → canonicalField) */
+  private aiOverrides: Map<string, string | null> = new Map()
 
   constructor(config: IngestConfig) {
     this.aliasMap = new Map()
@@ -32,6 +37,31 @@ export class FieldNormalizer {
     }
 
     logger.info(`Normalizer initialized with ${this.aliasMap.size} field aliases`)
+  }
+
+  /**
+   * Apply an AI-detected schema mapping as fallback for fields
+   * not found in the deterministic alias map.
+   */
+  setAiSchema(mapping: SchemaMapping | null): void {
+    this.aiOverrides.clear()
+    if (!mapping?.fields) return
+
+    for (const [original, canonical] of Object.entries(mapping.fields)) {
+      this.aiOverrides.set(original.toLowerCase().trim(), canonical)
+    }
+
+    logger.info(
+      { fields: this.aiOverrides.size, note: mapping.note },
+      'AI schema overrides applied'
+    )
+  }
+
+  /**
+   * Clear AI overrides (call between files).
+   */
+  clearAiSchema(): void {
+    this.aiOverrides.clear()
   }
 
   /**
@@ -108,7 +138,7 @@ export class FieldNormalizer {
   private resolveField(rawKey: string): string | null {
     const lower = rawKey.toLowerCase().trim()
 
-    // Direct match
+    // Direct match from deterministic alias map
     const direct = this.aliasMap.get(lower)
     if (direct) return direct
 
@@ -123,6 +153,18 @@ export class FieldNormalizer {
 
     // Keep `id` as-is
     if (lower === 'id') return 'id'
+
+    // Fallback: AI-detected schema override
+    if (this.aiOverrides.size > 0) {
+      const aiField = this.aiOverrides.get(lower)
+      if (aiField !== undefined) {
+        // null means "skip this field" (AI decided it's not useful)
+        return aiField
+      }
+      // Also try the original raw key (case-preserved)
+      const aiFieldRaw = this.aiOverrides.get(rawKey.trim())
+      if (aiFieldRaw !== undefined) return aiFieldRaw
+    }
 
     return null
   }
