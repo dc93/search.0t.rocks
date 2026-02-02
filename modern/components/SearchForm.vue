@@ -24,84 +24,101 @@ async function onSubmit() {
 </script>
 
 <template>
-  <v-card variant="flat" color="transparent">
-    <v-row align="center" class="mb-2">
-      <v-col cols="12" md="3">
-        <h4>Search Something...</h4>
-      </v-col>
-      <v-col cols="12" md="2">
-        <v-checkbox v-model="exact" label="Exact match" density="compact" hide-details />
-      </v-col>
-      <v-col />
-    </v-row>
+  <div>
+    <div class="d-flex align-center mb-4">
+      <v-icon size="20" color="primary" class="mr-2">mdi-filter-variant</v-icon>
+      <span style="font-weight: 500; font-size: 0.9rem; color: #e2e8f0">Query Builder</span>
+      <v-spacer />
+      <v-checkbox
+        v-model="exact"
+        label="Exact match"
+        density="compact"
+        hide-details
+        color="primary"
+        style="flex: none"
+      />
+    </div>
 
-    <v-row
+    <div
       v-for="(query, idx) in queries"
       :key="idx"
-      align="center"
-      dense
-      class="mb-1"
+      class="d-flex align-center mb-2"
+      style="gap: 8px"
     >
-      <!-- Add/Remove button -->
-      <v-col cols="1" class="d-flex justify-center">
-        <v-btn
-          v-if="idx === 0"
-          icon
-          size="small"
-          @click="addQuery"
-          :disabled="queries.length >= maxQueries"
-        >
-          <v-icon>mdi-plus</v-icon>
-        </v-btn>
-        <v-btn v-else icon size="small" @click="removeQuery(idx)">
-          <v-icon>mdi-minus</v-icon>
-        </v-btn>
-      </v-col>
+      <v-btn
+        v-if="idx === 0"
+        icon
+        size="x-small"
+        variant="tonal"
+        color="primary"
+        @click="addQuery"
+        :disabled="queries.length >= maxQueries"
+      >
+        <v-icon size="16">mdi-plus</v-icon>
+      </v-btn>
+      <v-btn
+        v-else
+        icon
+        size="x-small"
+        variant="tonal"
+        color="error"
+        @click="removeQuery(idx)"
+      >
+        <v-icon size="16">mdi-minus</v-icon>
+      </v-btn>
 
-      <!-- Field selector -->
-      <v-col cols="12" md="2">
-        <v-select
-          v-model="query.field"
-          :items="[...QUERY_OPTIONS]"
-          hide-details
-        />
-      </v-col>
+      <v-select
+        v-model="query.field"
+        :items="[...QUERY_OPTIONS]"
+        hide-details
+        style="max-width: 180px"
+      />
 
-      <!-- NOT checkbox -->
-      <v-col cols="12" md="1" class="d-none d-md-flex">
-        <v-checkbox v-model="query.not" label="NOT" density="compact" hide-details />
-      </v-col>
+      <v-chip
+        :variant="query.not ? 'flat' : 'outlined'"
+        :color="query.not ? 'error' : undefined"
+        size="small"
+        @click="query.not = !query.not"
+        style="cursor: pointer; min-width: 52px; justify-content: center"
+      >
+        NOT
+      </v-chip>
 
-      <!-- Value input -->
-      <v-col :md="query.field === 'Password' ? 4 : 6">
-        <v-text-field
-          v-model="query.value"
-          hide-details
-          @keyup.enter="onSubmit"
-          :placeholder="`Enter ${query.field.toLowerCase()}...`"
-        />
-      </v-col>
+      <v-text-field
+        v-model="query.value"
+        hide-details
+        :placeholder="`Enter ${query.field.toLowerCase()}...`"
+        @keyup.enter="onSubmit"
+        class="flex-grow-1"
+      />
 
-      <!-- Extended search for passwords -->
-      <v-col v-if="query.field === 'Password'" md="2">
-        <v-checkbox
-          v-model="query.extendedSearch"
-          label="Extended"
-          density="compact"
-          hide-details
-        />
-      </v-col>
+      <v-chip
+        v-if="query.field === 'Password'"
+        :variant="query.extendedSearch ? 'flat' : 'outlined'"
+        :color="query.extendedSearch ? 'warning' : undefined"
+        size="small"
+        @click="query.extendedSearch = !query.extendedSearch"
+        style="cursor: pointer"
+      >
+        <v-icon start size="14">mdi-key-variant</v-icon>
+        Hash
+      </v-chip>
 
-      <!-- Search button on first row -->
-      <v-col md="2" class="d-flex justify-center">
-        <v-btn v-if="idx === 0" icon @click="onSubmit" :loading="isSearching">
-          <v-icon>mdi-magnify</v-icon>
-        </v-btn>
-      </v-col>
-    </v-row>
+      <v-btn
+        v-if="idx === 0"
+        color="primary"
+        @click="onSubmit"
+        :loading="isSearching"
+        style="min-width: 100px"
+      >
+        <v-icon start size="18">mdi-magnify</v-icon>
+        Search
+      </v-btn>
+      <div v-else style="min-width: 100px" />
+    </div>
 
-    <v-snackbar v-model="snackbar" :timeout="2000">
+    <v-snackbar v-model="snackbar" :timeout="2000" color="error">
       {{ snackbarText }}
     </v-snackbar>
-  </v-card>
+  </div>
 </template>

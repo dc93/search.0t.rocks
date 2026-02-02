@@ -43,11 +43,11 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'Database Search',
+      title: 'Sentinel TI Platform',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'theme-color', content: '#121212' },
+        { name: 'theme-color', content: '#0a0e17' },
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },

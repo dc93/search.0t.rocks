@@ -39,7 +39,6 @@ function doFillWallet() {
     snackbar.value = true
     return
   }
-  // Payment integration placeholder — replace with Stripe/crypto checkout
   snackbarText.value = 'Payment integration not yet configured.'
   snackbar.value = true
 }
@@ -52,81 +51,79 @@ function onDialogOpen() {
 
 <template>
   <div>
-    <v-btn @click="onDialogOpen" variant="text" class="text-white">
-      <span v-if="isLoading">Loading...</span>
-      <span v-else>{{ credits }} Credits</span>
-      <v-icon end>mdi-wallet</v-icon>
+    <v-btn
+      @click="onDialogOpen"
+      variant="tonal"
+      color="primary"
+      size="small"
+      class="mr-2"
+    >
+      <v-icon start size="16">mdi-wallet-outline</v-icon>
+      <span v-if="isLoading" style="font-size: 0.8rem">...</span>
+      <span v-else class="mono" style="font-size: 0.8rem">{{ credits }}</span>
     </v-btn>
 
-    <v-dialog v-model="showWallet" max-width="500">
-      <v-card>
-        <v-card-title class="d-flex align-center">
-          <span>Wallet Management</span>
+    <v-dialog v-model="showWallet" max-width="460">
+      <v-card style="border: 1px solid rgba(59,130,246,0.15)">
+        <div class="pa-4 d-flex align-center" style="border-bottom: 1px solid rgba(255,255,255,0.04)">
+          <v-icon color="primary" class="mr-2">mdi-wallet-outline</v-icon>
+          <span style="font-weight: 500">Wallet</span>
           <v-spacer />
-          <v-tooltip location="bottom">
-            <template #activator="{ props }">
-              <v-btn icon v-bind="props" size="small">
-                <v-icon>mdi-information</v-icon>
-              </v-btn>
-            </template>
-            <div style="max-width: 300px">
-              <p>Credits can be used for:</p>
-              <ul class="ml-4">
-                <li>Bulk data exports</li>
-                <li>Data enrichment via CSV upload</li>
-                <li>Visualization exports</li>
-              </ul>
-              <p class="mt-2">Regular search is always free.</p>
-            </div>
-          </v-tooltip>
-        </v-card-title>
+          <v-chip size="x-small" color="primary" variant="tonal" class="mono">
+            {{ credits }} credits
+          </v-chip>
+        </div>
 
-        <v-card-text>
+        <v-card-text class="pt-4">
           <v-text-field
             v-model="walletInput"
             label="Wallet ID"
             append-inner-icon="mdi-content-copy"
             @click:append-inner="handleCopy"
-            class="mb-2"
+            class="mb-2 mono"
+            style="font-size: 0.85rem"
           />
           <v-btn
             size="small"
             variant="tonal"
+            color="primary"
             class="mb-4"
             @click="handleUpdateWalletId"
             :disabled="walletInput === walletId"
           >
-            Update Wallet ID
+            Update ID
           </v-btn>
 
-          <v-alert type="warning" variant="outlined" density="compact" class="mb-4">
+          <v-alert variant="tonal" color="warning" density="compact" class="mb-4" style="font-size: 0.8rem">
+            <v-icon start size="14">mdi-alert-outline</v-icon>
             Your wallet ID is the key to your credits. Do not share it.
           </v-alert>
 
           <v-row>
-            <v-col cols="9">
+            <v-col cols="8">
               <v-text-field
                 v-model.number="walletFill"
-                label="Fill Wallet (1 USD = 100 credits)"
+                label="Add Credits (1 USD = 100)"
                 prepend-inner-icon="mdi-currency-usd"
                 type="number"
               />
             </v-col>
-            <v-col cols="3" class="d-flex align-center">
-              <v-btn color="primary" block @click="doFillWallet">Fill</v-btn>
+            <v-col cols="4" class="d-flex align-center">
+              <v-btn color="primary" block @click="doFillWallet" size="small">
+                <v-icon start size="16">mdi-plus</v-icon>
+                Fill
+              </v-btn>
             </v-col>
           </v-row>
         </v-card-text>
 
-        <v-card-actions>
+        <v-card-actions class="pa-4" style="border-top: 1px solid rgba(255,255,255,0.04)">
           <v-spacer />
-          <v-btn color="primary" @click="showWallet = false">Close</v-btn>
+          <v-btn variant="text" @click="showWallet = false" style="color: #64748b">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar" :timeout="2000" location="bottom">
-      {{ snackbarText }}
-    </v-snackbar>
+    <v-snackbar v-model="snackbar" :timeout="2000">{{ snackbarText }}</v-snackbar>
   </div>
 </template>
